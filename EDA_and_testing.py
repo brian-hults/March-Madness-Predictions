@@ -12,7 +12,6 @@ import pandas as pd
 import time
 from sportsipy.ncaab.teams import Teams
 from sklearn.linear_model import LassoCV
-from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
 
@@ -116,37 +115,10 @@ ncaaEDA = EDA()
 lasso_home, lasso_away, home_train_r2, away_train_r2, home_test_MSE, away_test_MSE, feature_coef_df = ncaaEDA.variable_selection()
 
 
-
 print(' Home R2: ', home_train_r2, '\n',
       'Away R2: ', away_train_r2, '\n',
       'Home Test MSE: ', home_test_MSE, '\n',
       'Away Test MSE: ', away_test_MSE)
-
-
-# FIELDS_TO_DROP = ['away_points', 'home_points', 'date', 'location',
-#                   'losing_abbr', 'losing_name', 'winner', 'winning_abbr',
-#                   'winning_name', 'home_ranking', 'away_ranking']
-
-# test_df = pd.read_pickle('./team_schedule_data/kentucky.pkl')
-# test_df.to_excel('kentucky.xlsx')
-    
-# X = dataset.drop(FIELDS_TO_DROP, 1).dropna().drop_duplicates()
-# y = dataset[['home_points', 'away_points']].values
-
-# Save the datasets to CSV for quicker load times
-# X.to_csv('ncaa-mens-bball-team-data.csv')
-# y.to_csv('ncaa-mens-bball-points-response.csv')
-
-# X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
-# parameters = {'bootstrap': False,
-#               'min_samples_leaf': 3,
-#               'n_estimators': 50,
-#               'min_samples_split': 10,
-#               'max_features': 'sqrt',
-#               'max_depth': 6}
-# model = RandomForestRegressor(**parameters).fit(X_train, y_train)
-# model.fit(X_train, y_train)
-# print(model.predict(X_test).astype(int), y_test)
 
 
 
