@@ -26,7 +26,12 @@ for team in teams:
     dataset = pd.concat([dataset, team.schedule.dataframe_extended])
 X = dataset.drop(FIELDS_TO_DROP, 1).dropna().drop_duplicates()
 y = dataset[['home_points', 'away_points']].values
-X_train, X_test, y_train, y_test = train_test_split(X, y)
+
+# Save the datasets to CSV for quicker load times
+X.to_csv('ncaa-mens-bball-team-data.csv')
+y.to_csv('ncaa-mens-bball-points-response.csv')
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
 parameters = {'bootstrap': False,
               'min_samples_leaf': 3,
               'n_estimators': 50,
@@ -37,3 +42,11 @@ model = RandomForestRegressor(**parameters).fit(X_train, y_train)
 model.fit(X_train, y_train)
 print(model.predict(X_test).astype(int), y_test)
 print("Runtime: ", time.time() - start_time, ' seconds')
+
+
+
+
+
+
+
+
