@@ -24,6 +24,7 @@ class EDA:
         self.teams = Teams()
         self.combined_df = self.combine_schedules_from_file()
 
+
     def query_and_save_schedules(self):
         # Query for and get Updated Team schedules
         start_time = time.time()
@@ -36,6 +37,7 @@ class EDA:
                 except:
                     print('\n', team.abbreviation, ' Failed to Read/Write team to pickle!')
         print("Runtime: ", time.time() - start_time, ' seconds')
+    
     
     def combine_schedules_from_file(self):
         # Read/Combine all team schedules for Variable Selection
@@ -58,6 +60,7 @@ class EDA:
         cleaned_combined_df.to_pickle('./team_schedule_data/cleaned_combined_schedule_df.pkl')
         print("Combine Schedules Runtime: ", time.time() - start_time, ' seconds')
         return cleaned_combined_df
+
 
     def variable_selection(self):
         # Perform Lasso CV variable selection on combined schedule dataframe
@@ -97,7 +100,6 @@ class EDA:
         feature_coef_df = pd.DataFrame.from_dict(data={'Features':X.columns,
                                                        'Home_Coefs':lasso_home_model.coef_,
                                                        'Away_Coefs':lasso_away_model.coef_})
-        
         output = [lasso_home_model,
                   lasso_away_model,
                   home_train_r2,
@@ -115,7 +117,6 @@ ncaaEDA = EDA()
 # Run Lasso Variable Selection and print out results
 lasso_home, lasso_away, home_train_r2, away_train_r2, home_test_MSE, away_test_MSE, feature_coef_df = ncaaEDA.variable_selection()
 
-
 print(' Home R2: ', home_train_r2, '\n',
       'Away R2: ', away_train_r2, '\n',
       'Home Test MSE: ', home_test_MSE, '\n',
@@ -123,6 +124,8 @@ print(' Home R2: ', home_train_r2, '\n',
 
 top_home_features = feature_coef_df[['Features','Home_Coefs']].sort_values(by='Home_Coefs', ascending=False).head(10)
 top_away_features = feature_coef_df[['Features','Away_Coefs']].sort_values(by='Away_Coefs', ascending=False).head(10)
+
+
 
 
 
