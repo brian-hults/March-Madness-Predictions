@@ -9,10 +9,12 @@ NCAA Mens Basketball - EDA and Testing
 
 # Install pacakges
 import pandas as pd
+import time
 from sportsreference.ncaab.teams import Teams
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
 
+start_time = time.time()
 
 FIELDS_TO_DROP = ['away_points', 'home_points', 'date', 'location',
                   'losing_abbr', 'losing_name', 'winner', 'winning_abbr',
@@ -34,3 +36,4 @@ parameters = {'bootstrap': False,
 model = RandomForestRegressor(**parameters).fit(X_train, y_train)
 model.fit(X_train, y_train)
 print(model.predict(X_test).astype(int), y_test)
+print("Runtime: ", time.time() - start_time, ' seconds')
