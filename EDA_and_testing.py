@@ -55,7 +55,7 @@ class EDA:
         # Remove NA values and duplicate records
         cleaned_combined_df = combined_df.dropna().drop_duplicates(subset='Date_Home_Team_Index').set_index('Date_Home_Team_Index')
         
-        cleaned_combined_df.to_pickle('cleaned_combined_schedule_df.pkl')
+        cleaned_combined_df.to_pickle('./team_schedule_data/cleaned_combined_schedule_df.pkl')
         print("Combine Schedules Runtime: ", time.time() - start_time, ' seconds')
         return cleaned_combined_df
 
@@ -109,9 +109,10 @@ class EDA:
         #print("Lasso Runtime: ", time.time() - start_time, ' seconds \n')
         return output
 
-
+# Create an instance of the EDA class
 ncaaEDA = EDA()
 
+# Run Lasso Variable Selection and print out results
 lasso_home, lasso_away, home_train_r2, away_train_r2, home_test_MSE, away_test_MSE, feature_coef_df = ncaaEDA.variable_selection()
 
 
@@ -120,8 +121,8 @@ print(' Home R2: ', home_train_r2, '\n',
       'Home Test MSE: ', home_test_MSE, '\n',
       'Away Test MSE: ', away_test_MSE)
 
-
-
+top_home_features = feature_coef_df[['Features','Home_Coefs']].sort_values(by='Home_Coefs', ascending=False).head(10)
+top_away_features = feature_coef_df[['Features','Away_Coefs']].sort_values(by='Away_Coefs', ascending=False).head(10)
 
 
 
