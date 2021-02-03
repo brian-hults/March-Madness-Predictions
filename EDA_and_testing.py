@@ -16,7 +16,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
 
 class EDA:
-    def __init__(self, ):
+    def __init__(self):
         self.seed = 37
         self.unavailable = ['BROWN','COLUMBIA','CORNELL','DARTMOUTH','HARVARD',
                             'MARYLAND-EASTERN-SHORE','PENNSYLVANIA','PRINCETON',
@@ -64,6 +64,7 @@ class EDA:
 
     def variable_selection(self):
         # Perform Lasso CV variable selection on combined schedule dataframe
+        # NOTE: LassoCV by default normalizes X features before fitting regression
         # start_time = time.time()
         FIELDS_TO_DROP = ['away_points','home_points','losing_abbr','date','location',
                           'losing_name','winner','winning_abbr',
