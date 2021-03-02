@@ -10,7 +10,10 @@ NCAA Mens Basketball - EDA and Testing
 # Install pacakges
 import pandas as pd
 import time
+import datetime
+from SQL_Utils import SQL_Utils
 from sportsipy.ncaab.teams import Teams
+from sportsipy.ncaab.schedule import Schedule
 from sklearn.linear_model import LassoCV
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
@@ -18,25 +21,37 @@ from sklearn.metrics import mean_squared_error
 class EDA:
     def __init__(self):
         self.seed = 37
+        self.today = datetime.date.today()
         self.unavailable = ['BROWN','COLUMBIA','CORNELL','DARTMOUTH','HARVARD',
                             'MARYLAND-EASTERN-SHORE','PENNSYLVANIA','PRINCETON',
                             'YALE']
+        self.sql = SQL_Utils()
         self.teams = Teams()
         self.combined_df = self.combine_schedules_from_file()
-
-
+        
+    
     def query_and_save_schedules(self):
         # Query for and get Updated Team schedules
         start_time = time.time()
         for team in self.teams:
+            # Get the dates for the games in the schedule that have already been played
+            gamedays = [datetime.datetime.strptime(game.date, '%a, %b %d, %Y').date() for game in Schedule(team.abbreviation)]
+            #past_games = gamedays[gamedays < self.today]
+            
+            
+            team.schedule.dataframe_extended.to_sql(team.abbreviation.lower(), self.sql.conn, if_exists='replace')
+            
             if team.abbreviation in self.unavailable:
                 continue
             else:
                 try:
-                    team.schedule.dataframe_extended.to_pickle('./team_schedule_data/%s.pkl' % team.abbreviation.lower())
+                    team.schedule.dataframe_extended.to_sql(team.abbreviation.lower(), self.sql.conn, if_exists='replace')
+                    # team.schedule.dataframe_extended.to_pickle('./team_schedule_data/%s.pkl' % team.abbreviation.lower())
                 except:
-                    print('\n', team.abbreviation, ' Failed to Read/Write team to pickle!')
-        print("Runtime: ", time.time() - start_time, ' seconds')
+                    print('\n', team.abbreviation, ' Failed to Read/Write team to database!')
+        # Close connection and print runtime
+        self.sql.conn.close()
+        print("Update Schedules Runtime: ", time.time() - start_time, ' seconds')
     
     
     def combine_schedules_from_file(self):
@@ -115,16 +130,19 @@ class EDA:
 # Create an instance of the EDA class
 ncaaEDA = EDA()
 
+# Update team schedules
+ncaaEDA.query_and_save_schedules()
+
 # Run Lasso Variable Selection and print out results
-lasso_home, lasso_away, home_train_r2, away_train_r2, home_test_MSE, away_test_MSE, feature_coef_df = ncaaEDA.variable_selection()
+# lasso_home, lasso_away, home_train_r2, away_train_r2, home_test_MSE, away_test_MSE, feature_coef_df = ncaaEDA.variable_selection()
 
-print(' Home R2: ', home_train_r2, '\n',
-      'Away R2: ', away_train_r2, '\n',
-      'Home Test MSE: ', home_test_MSE, '\n',
-      'Away Test MSE: ', away_test_MSE)
+# print(' Home R2: ', home_train_r2, '\n',
+#       'Away R2: ', away_train_r2, '\n',
+#       'Home Test MSE: ', home_test_MSE, '\n',
+#       'Away Test MSE: ', away_test_MSE)
 
-top_home_features = feature_coef_df[['Features','Home_Coefs']].sort_values(by='Home_Coefs', ascending=False).head(10)
-top_away_features = feature_coef_df[['Features','Away_Coefs']].sort_values(by='Away_Coefs', ascending=False).head(10)
+# top_home_features = feature_coef_df[['Features','Home_Coefs']].sort_values(by='Home_Coefs', ascending=False).head(10)
+# top_away_features = feature_coef_df[['Features','Away_Coefs']].sort_values(by='Away_Coefs', ascending=False).head(10)
 
 
 
