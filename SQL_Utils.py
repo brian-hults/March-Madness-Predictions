@@ -8,26 +8,20 @@ NCAA Mens Basketball - SQL database utilities
 """
 
 # Install pacakges
-# import pandas as pd
-import sqlite3 as sql
-from sqlite3 import Error
+import sqlalchemy as sql
+import sqlalchemy_utils.functions as sql_utils
 
 class SQL_Utils:
     def __init__(self):
-        self.db_file = './sqlite/db/team_schedule_data.db'
-        self.conn = self.create_connection()
+        self.db_address = 'sqlite:///sqlite/db/2020-2021_team_schedule_data.db'
+        if not sql_utils.database_exists(self.db_address):
+            sql_utils.create_database(self.db_address)
+        self.engine = self.create_engine()
         
-    def create_connection(self):
-        conn = None
-        try:
-            conn = sql.connect(self.db_file)
-        except Error as e:
-            print(e)
-        return conn
-    
-    def create_table(self, create_table_sql):
-        try:
-            c = self.conn.cursor()
-            c.execute(create_table_sql)
-        except Error as e:
-            print(e)
+    def create_engine(self):
+        # engine = None
+        # try:
+        engine = sql.create_engine(self.db_address, echo=False)
+        # except Error as e:
+        #     print(e)
+        return engine
