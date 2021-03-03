@@ -15,6 +15,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
 
 class Predict_Outcomes:
+    # TODO: Figure out tournament matchup to predict on multiple games at a time
     def __init__(self, home_team, away_team, n_games=10):
         self.seed = 37
         self.unavailable = ['brown','columbia','cornell','dartmouth','harvard',
@@ -46,8 +47,8 @@ class Predict_Outcomes:
             print('ERROR! - Team schedule not available!')
             return 'NA', 'NA'
         else:
-            home_team_df = pd.read_sql_table(self.home_abbreviation, con=self.sql.engine)
-            away_team_df = pd.read_sql_table(self.away_abbreviation, con=self.sql.engine)
+            home_team_df = pd.read_sql_table(self.home_abbreviation, con=self.sql.engine, index_col='index')
+            away_team_df = pd.read_sql_table(self.away_abbreviation, con=self.sql.engine, index_col='index')
             return home_team_df, away_team_df
         
     def build_features(self):
@@ -59,11 +60,16 @@ class Predict_Outcomes:
         away_full_df = self.away_schedule.drop(FIELDS_TO_DROP,1).tail(self.n_games)
         
         # Query the variable selection results for most important features
-        selected_home_features = pd.read_sql_table('')
+        sorted_home_features = pd.read_sql_table('lasso_home_sorted_features', con=self.sql.engine).drop('index',1)
+        sorted_away_features = pd.read_sql_table('lasso_away_sorted_features', con=self.sql.engine).drop('index',1)
+        
+        # Get the subsets of most important features
+        top_home_features = sorted_home_features[abs(sorted_home_features['Home_Coefs']) > 0.05]['Features']
+        top_away_features = sorted_away_features[abs(sorted_away_features['Away_Coefs']) > 0.05]['Features']
         
         # Compile the selected feature dataframes
-        home_feature_df = self.home_schedule[['pace','away_defensive_rating','home_field_goals']].tail(self.n_games)
-        away_feature_df = self.away_schedule[['pace','away_offensive_rating','away_field_goals','away_free_throws','away_three_point_field_goals']].tail(self.n_games)
+        home_feature_df = self.home_schedule[top_home_features].tail(self.n_games)
+        away_feature_df = self.away_schedule[top_away_features].tail(self.n_games)
         
         # Determine teams home/away status in their schedule
         home_idx = pd.Series(self.home_schedule.index.str.contains(self.home_abbreviation, regex=False),
@@ -134,6 +140,7 @@ class Predict_Outcomes:
                      home_rf_model,
                      away_rf_model,
                      n_game_avg=5):
+        # TODO: Figure out how to better represent the test data
         X_home_test = X_home.tail(n_game_avg).mean(axis=0).to_frame().transpose()
         X_away_test = X_away.tail(n_game_avg).mean(axis=0).to_frame().transpose()
         
@@ -154,7 +161,7 @@ class Predict_Outcomes:
         return home_lr_pred, away_lr_pred, home_rf_pred, away_rf_pred
 
 
-ncaab_Predictor = Predict_Outcomes('missouri', 'kentucky')
+ncaab_Predictor = Predict_Outcomes('georgia-tech', 'wake-forest')
         
 X_home_full, X_away_full, X_home, X_away, y_cat_home, y_cont_home, y_cat_away, y_cont_away = ncaab_Predictor.build_features()
 

@@ -13,7 +13,6 @@ import time
 import datetime
 from tqdm import tqdm
 from SQL_Utils import SQL_Utils
-from sqlalchemy import exc
 from sportsipy.ncaab.teams import Teams
 from sklearn.linear_model import LassoCV
 from sklearn.model_selection import train_test_split
