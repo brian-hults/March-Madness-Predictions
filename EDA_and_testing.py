@@ -44,7 +44,9 @@ class EDA:
             
             if team.abbreviation in self.unavailable:
                 continue
+            # If the table has ever been updated
             elif last_updated:
+                # If the last update was before today
                 if datetime.date.today() <= last_updated:
                     try:
                         schedule = team.schedule.dataframe_extended
@@ -54,10 +56,12 @@ class EDA:
                         
                         # Filter out games that were before the last updated date
                         schedule = schedule[schedule['date'] > last_updated]
-                        if len(schedule) > 0:
-                            schedule.to_sql(team.abbreviation.lower(), con=self.sql.engine, if_exists='append')
+                        # if len(schedule) > 0:
+                        schedule.to_sql(team.abbreviation.lower(), con=self.sql.engine, if_exists='append')
                     except:
                         print('\n', team.abbreviation, ' Failed to update team schedule in database!')
+                else:
+                    continue
 
             else:
                 try:
@@ -73,9 +77,10 @@ class EDA:
         updated_date = pd.Series(data={'date': datetime.date.today()})
         updated_date.to_sql('updated_date', con=self.sql.engine, if_exists='replace')
 
-        self.combine_schedules()
         # Print runtime
         print("Update Schedules Runtime: ", time.time() - start_time, ' seconds')
+
+        self.combine_schedules()
         # return combined_df
     
     
@@ -95,14 +100,13 @@ class EDA:
                 combined_df = pd.concat([combined_df, team_df])
                 
         # Reset index to a column so we can remove duplicates
-        combined_df.reset_index(inplace=True)
         combined_df.rename(columns={'index':'Date_Home_Team_Index'}, inplace=True)
         
         # Remove NA values and duplicate records
-        cleaned_combined_df = combined_df.dropna().drop_duplicates(subset='Date_Home_Team_Index').set_index('Date_Home_Team_Index')
+        cleaned_combined_df = combined_df.drop_duplicates(subset='Date_Home_Team_Index').set_index('Date_Home_Team_Index')
         
         # Write combined dataframe to the database
-        cleaned_combined_df.to_sql('cleaned_combined_schedule', con=self.sql.engine)
+        cleaned_combined_df.to_sql('cleaned_combined_schedule', con=self.sql.engine, if_exists='replace')
         
         # Print runtime
         print("Combine Schedules Runtime: ", time.time() - start_time, ' seconds')
@@ -118,12 +122,12 @@ class EDA:
                           'winning_name','home_ranking','away_ranking']
         
         # Get the combined df from the database
-        combined_df = pd.read_sql_table('cleaned_combined_schedule', con=self.sql.engine)
+        combined_df = pd.read_sql_table('cleaned_combined_schedule', con=self.sql.engine).set_index('Date_Home_Team_Index')
         
         # Split data into features and response values
         X = combined_df.drop(FIELDS_TO_DROP,1)
-        y_home = self.combined_df['home_points']
-        y_away = self.combined_df['away_points']
+        y_home = combined_df['home_points']
+        y_away = combined_df['away_points']
         
         # Create training and test splits
         X_train, X_test, y_home_train, y_home_test, y_away_train, y_away_test = train_test_split(X,
@@ -161,12 +165,14 @@ class EDA:
         
         #print("Lasso Runtime: ", time.time() - start_time, ' seconds \n')
         return output
-
+    
 # Create an instance of the EDA class
 ncaaEDA = EDA()
 
 # Update team schedules
 ncaaEDA.update_schedule_db()
+
+#ncaaEDA.combine_schedules()
 
 # Run Lasso Variable Selection and print out results
 lasso_home, lasso_away, home_train_r2, away_train_r2, home_test_MSE, away_test_MSE, feature_coef_df = ncaaEDA.variable_selection()
