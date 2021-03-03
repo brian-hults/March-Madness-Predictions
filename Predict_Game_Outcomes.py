@@ -9,6 +9,7 @@ NCAA Mens Basketball - Predict Game Outcomes
 
 # Install pacakges
 import pandas as pd
+from SQL_Utils import SQL_Utils
 from sportsipy.ncaab.teams import Teams
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
@@ -20,10 +21,11 @@ class Predict_Outcomes:
                             'maryland-eastern-shore','pennsylvania','princeton',
                             'yale', 'cal-poly']
         self.teams = [team.abbreviation.lower() for team in Teams()]
+        self.sql = SQL_Utils()
         if (home_team in self.teams) and (away_team in self.teams):
             self.home_abbreviation = home_team
             self.away_abbreviation = away_team
-            self.home_schedule, self.away_schedule = self.read_schedules_from_file()
+            self.home_schedule, self.away_schedule = self.query_schedules()
         
             # Compare the length of the schedule history for each team
             home_sch_len = len(self.home_schedule.index)
@@ -39,13 +41,13 @@ class Predict_Outcomes:
         else:
             print('ERROR! - Invalid team name(s) not found in season schedule!')
         
-    def read_schedules_from_file(self):
+    def query_schedules(self):
         if (self.home_abbreviation in self.unavailable) or (self.away_abbreviation in self.unavailable):
             print('ERROR! - Team schedule not available!')
             return 'NA', 'NA'
         else:
-            home_team_df = pd.read_pickle('./team_schedule_data/%s.pkl' % self.home_abbreviation)
-            away_team_df = pd.read_pickle('./team_schedule_data/%s.pkl' % self.away_abbreviation)
+            home_team_df = pd.read_sql_table(self.home_abbreviation, con=self.sql.engine)
+            away_team_df = pd.read_sql_table(self.away_abbreviation, con=self.sql.engine)
             return home_team_df, away_team_df
         
     def build_features(self):
@@ -55,6 +57,9 @@ class Predict_Outcomes:
         # Compile the full feature dataframes
         home_full_df = self.home_schedule.drop(FIELDS_TO_DROP,1).tail(self.n_games)
         away_full_df = self.away_schedule.drop(FIELDS_TO_DROP,1).tail(self.n_games)
+        
+        # Query the variable selection results for most important features
+        selected_home_features = pd.read_sql_table('')
         
         # Compile the selected feature dataframes
         home_feature_df = self.home_schedule[['pace','away_defensive_rating','home_field_goals']].tail(self.n_games)

@@ -160,16 +160,12 @@ class EDA:
         results_df = pd.DataFrame(data={'home_train_r2': home_train_r2,
                                         'away_train_r2': away_train_r2,
                                         'home_test_MSE': home_test_MSE,
-                                        'away_test_MSE': away_test_MSE})
+                                        'away_test_MSE': away_test_MSE},
+                                  index=range(1))
         
         results_df.to_sql('lasso_results', con=self.sql.engine, if_exists='replace')
         
-        output = [lasso_home_model,
-                  lasso_away_model,
-                  results_df,
-                  feature_coef_df]
-        
-        return output
+        return lasso_home_model, lasso_away_model, results_df, feature_coef_df
     
 # Create an instance of the EDA class
 ncaaEDA = EDA()
@@ -180,10 +176,10 @@ ncaaEDA = EDA()
 # Run Lasso Variable Selection and print out results
 lasso_home, lasso_away, results_df, feature_coef_df = ncaaEDA.variable_selection()
 
-print(' Home R2: ', results_df['home_train_r2'], '\n',
-      'Away R2: ', results_df['away_train_r2'], '\n',
-      'Home Test MSE: ', results_df['home_test_MSE'], '\n',
-      'Away Test MSE: ', results_df['away_test_MSE'])
+print(' Home R2: ', results_df['home_train_r2'][0], '\n',
+      'Away R2: ', results_df['away_train_r2'][0], '\n',
+      'Home Test MSE: ', results_df['home_test_MSE'][0], '\n',
+      'Away Test MSE: ', results_df['away_test_MSE'][0])
 
 
 
