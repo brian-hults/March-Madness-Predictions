@@ -18,7 +18,7 @@ class Predict_Outcomes:
         self.seed = 37
         self.unavailable = ['brown','columbia','cornell','dartmouth','harvard',
                             'maryland-eastern-shore','pennsylvania','princeton',
-                            'yale']
+                            'yale', 'cal-poly']
         self.teams = [team.abbreviation.lower() for team in Teams()]
         if (home_team in self.teams) and (away_team in self.teams):
             self.home_abbreviation = home_team
