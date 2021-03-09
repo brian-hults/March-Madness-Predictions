@@ -1,4 +1,3 @@
 sqlite/
 scrap-code.py
-kentucky.xlsx
-tournament_matchups.xlsx
+*.xlsx
