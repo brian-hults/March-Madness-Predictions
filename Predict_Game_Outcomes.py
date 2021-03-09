@@ -13,16 +13,32 @@ from SQL_Utils import SQL_Utils
 from sportsipy.ncaab.teams import Teams
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.naive_bayes import GaussianNB
 
 class Predict_Outcomes:
     # TODO: Figure out tournament matchup to predict on multiple games at a time
-    def __init__(self, home_team, away_team, n_games=10):
+    def __init__(self, home_team, away_team, data=None, n_games=10):
         self.seed = 37
         self.unavailable = ['brown','columbia','cornell','dartmouth','harvard',
                             'maryland-eastern-shore','pennsylvania','princeton',
                             'yale', 'cal-poly']
         self.teams = [team.abbreviation.lower() for team in Teams()]
         self.sql = SQL_Utils()
+        
+        if data:
+            self.game_list = self.read_games()
+            self.prep_schedule_data(n_games)
+        else:
+            self.game_list = pd.DataFrame(data={'Home': home_team, 'Away': away_team})
+            self.prep_schedule_data(home_team, away_team, n_games)
+            
+        
+    def read_games(self):
+        games_df = pd.read_excel('tournament_matchups.xlsx')
+        return games_df
+    
+    
+    def prep_schedule_data(self, home_team, away_team, n_games):
         if (home_team in self.teams) and (away_team in self.teams):
             self.home_abbreviation = home_team
             self.away_abbreviation = away_team
@@ -41,6 +57,7 @@ class Predict_Outcomes:
                 self.n_games = n_games
         else:
             print('ERROR! - Invalid team name(s) not found in season schedule!')
+        
         
     def query_schedules(self):
         if (self.home_abbreviation in self.unavailable) or (self.away_abbreviation in self.unavailable):
@@ -132,7 +149,24 @@ class Predict_Outcomes:
         
         return home_linReg_model, away_linReg_model, home_rf_model, away_rf_model
     
-    def test_predict(self,
+    
+    def train_classifiers(self, X_home, X_away, y_home, y_away):
+        # Fit Gaussian Naive Bayes models
+        home_gnb_model = GaussianNB().fit(X_home, y_home)
+        away_gnb_model = GaussianNB().fit(X_away, y_away)
+        
+        # Score trained models
+        home_acc = home_gnb_model.score(X_home, y_home)
+        away_acc = away_gnb_model.score(X_away, y_away)
+        
+        print('Gaussian Naive Bayes:\n',
+              'Home Accuracy: ', home_acc, '\n',
+              'Away Accuracy: ', away_acc, '\n')
+        
+        return home_gnb_model, away_gnb_model
+        
+    
+    def reg_predict(self,
                      X_home,
                      X_away,
                      home_lr_model,
@@ -159,6 +193,25 @@ class Predict_Outcomes:
               'Predicted Away Points: ', away_rf_pred, '\n')
         
         return home_lr_pred, away_lr_pred, home_rf_pred, away_rf_pred
+    
+    
+    def clf_predict(self,
+                    X_home,
+                    X_away,
+                    home_gnb_model,
+                    away_gnb_model,
+                    n_game_avg=5):
+        X_home_test = X_home.tail(n_game_avg).mean(axis=0).to_frame().transpose()
+        X_away_test = X_away.tail(n_game_avg).mean(axis=0).to_frame().transpose()
+        
+        home_gnb_pred = home_gnb_model.predict(X_home_test)
+        away_gnb_pred = away_gnb_model.predict(X_away_test)
+        
+        print('Gaussian Naive Bayes:\n',
+              'Home Model Probabilities: ', home_gnb_pred, '\n',
+              'Away Model Probabilities: ', away_gnb_pred, '\n')
+        
+        return home_gnb_pred, away_gnb_pred
 
 
 ncaab_Predictor = Predict_Outcomes('georgia-tech', 'wake-forest')
@@ -172,10 +225,10 @@ print('Full Features Model:\n')
 home_full_lr_model, away_full_lr_model, home_full_rf_model, away_full_rf_model = ncaab_Predictor.train_regressors(X_home_full, X_away_full, y_cont_home, y_cont_away)
 
 print('Missouri (H) vs Kentucky (A) Prediction (selected features):', '\n')
-missouri_lr_pred1, kentucky_lr_pred1, missouri_rf_pred1, kentucky_rf_pred1 = ncaab_Predictor.test_predict(X_home, X_away, home_sel_lr_model, away_sel_lr_model, home_sel_rf_model, away_sel_rf_model)
+missouri_lr_pred1, kentucky_lr_pred1, missouri_rf_pred1, kentucky_rf_pred1 = ncaab_Predictor.reg_predict(X_home, X_away, home_sel_lr_model, away_sel_lr_model, home_sel_rf_model, away_sel_rf_model)
 
 print('Missouri (H) vs Kentucky (A) Prediction (full features):', '\n')
-missouri_lr_pred2, kentucky_lr_pred2, missouri_rf_pred2, kentucky_rf_pred2 = ncaab_Predictor.test_predict(X_home_full, X_away_full, home_full_lr_model, away_full_lr_model, home_full_rf_model, away_full_rf_model)
+missouri_lr_pred2, kentucky_lr_pred2, missouri_rf_pred2, kentucky_rf_pred2 = ncaab_Predictor.reg_predict(X_home_full, X_away_full, home_full_lr_model, away_full_lr_model, home_full_rf_model, away_full_rf_model)
         
         
         

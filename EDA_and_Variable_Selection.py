@@ -170,7 +170,7 @@ class EDA:
 ncaaEDA = EDA()
 
 # Update team schedules
-# ncaaEDA.update_schedule_db()
+ncaaEDA.update_schedule_db()
 
 # Run Lasso Variable Selection and print out results
 lasso_home, lasso_away, results_df, feature_coef_df = ncaaEDA.variable_selection()
