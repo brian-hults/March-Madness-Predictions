@@ -51,7 +51,7 @@ class EDA:
             # If the table has ever been updated
             elif last_updated:
                 # If the last update was before today
-                if datetime.date.today() <= last_updated:
+                if datetime.date.today() >= last_updated:
                     try:
                         schedule = team.schedule.dataframe_extended
                         # Convert the date column to a datetime object to use for filtering
