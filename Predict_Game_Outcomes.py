@@ -89,16 +89,17 @@ class Predict_Outcomes:
         #                      name='winner').replace({True:'Home', False:'Away'})
         
         # Separate the home and away features for each team's schedule
+        # Source to merge column headers: https://stackoverflow.com/questions/39741429/pandas-replace-a-character-in-all-column-names
         home_features = pd.concat([self.home_schedule[self.home_schedule['home_team']==True].drop(FIELDS_TO_DROP,1).filter(regex='home', axis=1),
-                                   self.home_schedule[self.home_schedule['home_team']==False].drop(FIELDS_TO_DROP,1).filter(regex='away', axis=1)], axis=0)
+                                   self.home_schedule[self.home_schedule['home_team']==False].drop(FIELDS_TO_DROP,1).filter(regex='away', axis=1).columns.str.replace('away','home')], axis=0)
         away_features = pd.concat([self.away_schedule[self.away_schedule['home_team']==True].drop(FIELDS_TO_DROP,1).filter(regex='home', axis=1),
-                                   self.away_schedule[self.away_schedule['home_team']==False].drop(FIELDS_TO_DROP,1).filter(regex='away', axis=1)], axis=0)
+                                   self.away_schedule[self.away_schedule['home_team']==False].drop(FIELDS_TO_DROP,1).filter(regex='away', axis=1).columns.str.replace('home','away')], axis=0)
         home_pace = self.home_schedule['pace']
         away_pace = self.away_schedule['pace']
         avg_pace = pd.concat([home_pace, away_pace], axis=1).mean(axis=1)
         
         # Compile the team full feature dataframes
-        full_test_df = pd.concat([away_features, home_features, avg_pace]).tail(self.n_games)
+        full_test_df = pd.concat([away_features, home_features, avg_pace], axis=1).tail(self.n_games)
         
         # Compile the selected feature dataframes
         select_home_df = full_test_df.filter(top_home_features, axis=1)

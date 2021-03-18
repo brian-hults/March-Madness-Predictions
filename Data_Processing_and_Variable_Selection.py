@@ -68,6 +68,9 @@ class EDA:
                         # Add team status to the dataframe
                         schedule = pd.concat([team_status, schedule], axis=1)
                         
+                        # Convert Nan values to zeros
+                        schedule.fillna(0, axis=0, inplace=True)
+                        
                         # Push team schedule to database
                         schedule.to_sql(team.abbreviation.lower(), con=self.sql.engine, if_exists='append')
                         
@@ -92,6 +95,9 @@ class EDA:
                     
                     # Add team status to the dataframe
                     schedule = pd.concat([team_status, schedule], axis=1)
+                    
+                    # Convert Nan values to zeros
+                    schedule.fillna(0, axis=0, inplace=True)
                     
                     schedule.to_sql(team.abbreviation.lower(), con=self.sql.engine, if_exists='replace')
                     
@@ -143,7 +149,8 @@ class EDA:
                                                                                                  random_state=self.seed)
         
         # Set NaN values to zero
-        X_test = X_test.fillna(0)
+        # X_train.fillna(0, inplace=True)
+        # X_test.fillna(0, inplace=True)
         
         # Fit Lasso Models
         lasso_home_model = LassoCV(cv=10, random_state=self.seed).fit(X_train, y_home_train)

@@ -19,5 +19,5 @@ class SQL_Utils:
         self.engine = self.create_engine()
         
     def create_engine(self):
-        engine = sql.create_engine(self.db_address, echo=False, pool_recycle=3600)
+        engine = sql.create_engine(self.db_address, echo=False, pool_recycle=1800)
         return engine
