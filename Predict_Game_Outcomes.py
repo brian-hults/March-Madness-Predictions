@@ -9,32 +9,25 @@ NCAA Mens Basketball - Predict Game Outcomes
 
 # Install pacakges
 import pandas as pd
-from tqdm import tqdm
 from SQL_Utils import SQL_Utils
 from sportsipy.ncaab.teams import Teams
-from sklearn.linear_model import LinearRegression
+# from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.naive_bayes import GaussianNB
+from sklearn.preprocessing import LabelEncoder
 
 class Predict_Outcomes:
-    # TODO: Figure out tournament matchup to predict on multiple games at a time
-    def __init__(self, home_team, away_team, n_games=10):
+    def __init__(self):
         self.seed = 37
         self.unavailable = ['brown','columbia','cornell','dartmouth','harvard',
                             'maryland-eastern-shore','pennsylvania','princeton',
                             'yale', 'cal-poly']
         self.teams = [team.abbreviation.lower() for team in Teams()]
         self.sql = SQL_Utils()
-        # self.game_list = pd.DataFrame(data={'Home': home_team, 'Away': away_team})
-        self.prep_schedule_data(home_team, away_team, n_games)
-            
-        
-    # def read_games(self):
-    #     games_df = pd.read_excel('tournament_matchups.xlsx')
-    #     return games_df
+        # self.prep_schedule_data(home_team, away_team, n_games)
     
     
-    def prep_schedule_data(self, home_team, away_team, n_games):
+    def prep_schedule_data(self, home_team, away_team, n_games=10):
         if (home_team in self.teams) and (away_team in self.teams):
             self.home_abbreviation = home_team
             self.away_abbreviation = away_team
@@ -66,48 +59,66 @@ class Predict_Outcomes:
         
         
     def build_features(self):
-        FIELDS_TO_DROP = ['away_points','home_points','losing_abbr','date','location',
-                          'losing_name','winner','winning_abbr',
+        FIELDS_TO_DROP = ['away_points','home_points','losing_abbr',
+                          'date','location','losing_name','winner','winning_abbr',
                           'winning_name','home_ranking','away_ranking']
-        # Compile the full feature dataframes
-        home_full_df = self.home_schedule.drop(FIELDS_TO_DROP,1).tail(self.n_games)
-        away_full_df = self.away_schedule.drop(FIELDS_TO_DROP,1).tail(self.n_games)
+        
+        # Get the combined df from the database
+        combined_df = pd.read_sql_table('cleaned_combined_schedule', con=self.sql.engine, index_col='Date_Home_Team_Index')
+        
+        # Split data into features and response values
+        X_combined = combined_df.drop(FIELDS_TO_DROP,1)
+        y_combined_cat = combined_df['winner']
+        y_combined_cont_home = combined_df['home_points']
+        y_combined_cont_away = combined_df['away_points']
         
         # Query the variable selection results for most important features
         sorted_home_features = pd.read_sql_table('lasso_home_sorted_features', con=self.sql.engine).drop('index',1)
         sorted_away_features = pd.read_sql_table('lasso_away_sorted_features', con=self.sql.engine).drop('index',1)
         
         # Get the subsets of most important features
-        top_home_features = sorted_home_features[abs(sorted_home_features['Home_Coefs']) > 0.05]['Features']
-        top_away_features = sorted_away_features[abs(sorted_away_features['Away_Coefs']) > 0.05]['Features']
+        top_home_features = sorted_home_features[abs(sorted_home_features['Home_Coefs']) > 0.1]['Features']
+        top_away_features = sorted_away_features[abs(sorted_away_features['Away_Coefs']) > 0.1]['Features']
+        
+        # Determine teams home/away status in their schedule [NOTE: 'winner' column label is only used for logical comparison in following steps]
+        # home_idx = pd.Series(self.home_schedule.index.str.contains(self.home_abbreviation, regex=False),
+        #                      index=self.home_schedule.index,
+        #                      name='winner').replace({True:'Home', False:'Away'})
+        # away_idx = pd.Series(self.away_schedule.index.str.contains(self.away_abbreviation, regex=False),
+        #                      index=self.away_schedule.index,
+        #                      name='winner').replace({True:'Home', False:'Away'})
+        
+        # Separate the home and away features for each team's schedule
+        home_features = pd.concat([self.home_schedule[self.home_schedule['home_team']==True].drop(FIELDS_TO_DROP,1).filter(regex='home', axis=1),
+                                   self.home_schedule[self.home_schedule['home_team']==False].drop(FIELDS_TO_DROP,1).filter(regex='away', axis=1)], axis=0)
+        away_features = pd.concat([self.away_schedule[self.away_schedule['home_team']==True].drop(FIELDS_TO_DROP,1).filter(regex='home', axis=1),
+                                   self.away_schedule[self.away_schedule['home_team']==False].drop(FIELDS_TO_DROP,1).filter(regex='away', axis=1)], axis=0)
+        home_pace = self.home_schedule['pace']
+        away_pace = self.away_schedule['pace']
+        
+        # Compile the team full feature dataframes
+        home_full_df = pd.concat([self.home_schedule.drop(FIELDS_TO_DROP,1).filter(regex='home', axis=1), self.away_schedule.drop]).tail(self.n_games)
+        away_full_df = self.away_schedule.drop(FIELDS_TO_DROP,1).tail(self.n_games)
         
         # Compile the selected feature dataframes
-        home_feature_df = self.home_schedule[top_home_features].tail(self.n_games)
-        away_feature_df = self.away_schedule[top_away_features].tail(self.n_games)
-        
-        # Determine teams home/away status in their schedule
-        home_idx = pd.Series(self.home_schedule.index.str.contains(self.home_abbreviation, regex=False),
-                             index=self.home_schedule.index,
-                             name='winner').replace({True:'Home', False:'Away'})
-        away_idx = pd.Series(self.away_schedule.index.str.contains(self.away_abbreviation, regex=False),
-                             index=self.away_schedule.index,
-                             name='winner').replace({True:'Home', False:'Away'})
+        home_feature_df = self.home_schedule.filter(top_home_features, axis=1).tail(self.n_games)
+        away_feature_df = self.away_schedule.filter(top_away_features, axis=1).tail(self.n_games)
         
         # Build the corresponding responses (Loss=0, Win=1)
-        home_cat_response = pd.Series(self.home_schedule['winner']==home_idx,
+        home_cat_response = pd.Series(self.home_schedule['winner']==self.home_schedule['team_status'],
                                       index=self.home_schedule.index,
                                       name='Outcome').replace({True:'Win',False:'Loss'})
-        away_cat_response = pd.Series(self.away_schedule['winner']==away_idx,
+        away_cat_response = pd.Series(self.away_schedule['winner']==self.away_schedule['team_status'],
                                       index=self.away_schedule.index,
                                       name='Outcome').replace({True:'Win',False:'Loss'})
         
         # Rename the index columns to avoid confusion now that we are done matching, and take the tail
-        home_idx = pd.Series(data=home_idx.values, index=home_idx.index, name='team_status')
-        away_idx = pd.Series(data=away_idx.values, index=away_idx.index, name='team_status')
+        self.home_idx = pd.Series(data=home_idx.values, index=home_idx.index, name='team_status')
+        self.away_idx = pd.Series(data=away_idx.values, index=away_idx.index, name='team_status')
         
         # Get the points per game for home and away
-        home_sch_points = pd.concat([home_idx, self.home_schedule['home_points'], self.home_schedule['away_points'], home_cat_response], axis=1)
-        away_sch_points = pd.concat([away_idx, self.away_schedule['home_points'], self.away_schedule['away_points'], away_cat_response], axis=1)
+        home_sch_points = pd.concat([self.home_idx, self.home_schedule['home_points'], self.home_schedule['away_points'], home_cat_response], axis=1)
+        away_sch_points = pd.concat([self.away_idx, self.away_schedule['home_points'], self.away_schedule['away_points'], away_cat_response], axis=1)
         
         # Build the corresponding continuous responses
         home_resp_list = []
@@ -127,10 +138,14 @@ class Predict_Outcomes:
         home_cont_response = pd.Series(home_resp_list).tail(self.n_games)
         away_cont_response = pd.Series(away_resp_list).tail(self.n_games)
         
-        # home_cont_response = pd.Series([home_sch_points.loc[i,'home_points'] if home_sch_points.loc[i,'winner']=='Home' else home_sch_points.loc[i,'away_points'] for i in home_sch_points.index]).tail(self.n_games)
-        # away_cont_response = pd.Series([away_sch_points.loc[i,'home_points'] if away_sch_points.loc[i,'winner']=='Home' else away_sch_points.loc[i,'away_points'] for i in away_sch_points.index]).tail(self.n_games)
+        home_cat_response = home_cat_response.tail(self.n_games)
+        away_cat_response = away_cat_response.tail(self.n_games)
         
-        output = [home_full_df,
+        output = [X_combined,
+                  y_combined_cont_home,
+                  y_combined_cont_away,
+                  y_combined_cat,
+                  home_full_df,
                   away_full_df,
                   home_feature_df,
                   away_feature_df,
@@ -141,76 +156,80 @@ class Predict_Outcomes:
         
         return output
     
-    def train_regressors(self, X_home, X_away, y_home, y_away):
-        # Fit linear regression models
-        home_linReg_model = LinearRegression(normalize=True).fit(X_home, y_home)
-        away_linReg_model = LinearRegression(normalize=True).fit(X_away, y_away)
+    def build_test_point(self, X_home, X_away, n_game_avg=5):
+        # TODO: Figure out how to better represent the test data
+        self.home_idx
         
-        # Score trained models
-        home_lr_r2 = home_linReg_model.score(X_home, y_home)
-        away_lr_r2 = away_linReg_model.score(X_away, y_away)
+        X_home_test = pd.concat([X_home.filter(regex='home'), ])
+        
+        X_home_test = X_home_test.tail(n_game_avg).mean(axis=0).to_frame().transpose()
+        X_away_test = X_away.tail(n_game_avg).mean(axis=0).to_frame().transpose()
+        return X_home_test, X_away_test
+    
+    def train_regressors(self, X_train, y_train_home, y_train_away):
+        # Fit linear regression models
+        # home_linReg_model = LinearRegression(normalize=True).fit(X_home, y_home)
+        # away_linReg_model = LinearRegression(normalize=True).fit(X_away, y_away)
+        
+        # # Score trained models
+        # home_lr_r2 = home_linReg_model.score(X_home, y_home)
+        # away_lr_r2 = away_linReg_model.score(X_away, y_away)
         
         # print('Linear Regression:\n',
         #       'Home R2: ', home_lr_r2, '\n',
         #       'Away R2: ', away_lr_r2, '\n')
         
-        home_rf_model = RandomForestRegressor(random_state=self.seed).fit(X_home, y_home)
-        away_rf_model = RandomForestRegressor(random_state=self.seed).fit(X_away, y_away)
+        home_rf_model = RandomForestRegressor(n_estimators=200, random_state=self.seed).fit(X_train, y_train_home)
+        away_rf_model = RandomForestRegressor(n_estimators=200, random_state=self.seed).fit(X_train, y_train_away)
         
         # Score trained models
-        home_rf_r2 = home_rf_model.score(X_home, y_home)
-        away_rf_r2 = away_rf_model.score(X_away, y_away)
+        home_rf_r2 = home_rf_model.score(X_train, y_train_home)
+        away_rf_r2 = away_rf_model.score(X_train, y_train_away)
         
-        print('Random Forest Regression:\n',
-              'Home R2: ', home_rf_r2, '\n',
-              'Away R2: ', away_rf_r2, '\n')
+        # print('Random Forest Regression:\n',
+        #       'Home R2: ', home_rf_r2, '\n',
+        #       'Away R2: ', away_rf_r2, '\n')
         
-        return home_linReg_model, away_linReg_model, home_rf_model, away_rf_model
+        return home_rf_model, away_rf_model, home_rf_r2, away_rf_r2 # home_linReg_model, away_linReg_model,
     
     
-    def train_classifiers(self, X_home, X_away, y_home, y_away):
+    def train_classifiers(self, X_train, y_train):
         # Fit Gaussian Naive Bayes models
-        home_gnb_model = GaussianNB().fit(X_home, y_home)
-        away_gnb_model = GaussianNB().fit(X_away, y_away)
+        gnb_model = GaussianNB().fit(X_train, y_train)
         
-        # Score trained models
-        home_acc = home_gnb_model.score(X_home, y_home)
-        away_acc = away_gnb_model.score(X_away, y_away)
+        # Score trained model
+        gnb_acc = gnb_model.score(X_train, y_train)
         
-        print('Gaussian Naive Bayes:\n',
-              'Home Accuracy: ', home_acc, '\n',
-              'Away Accuracy: ', away_acc, '\n')
+        # print('Gaussian Naive Bayes:\n',
+        #       'Home Accuracy: ', home_acc, '\n',
+        #       'Away Accuracy: ', away_acc, '\n')
         
-        return home_gnb_model, away_gnb_model
+        return gnb_model, gnb_acc
         
     
     def reg_predict(self,
-                     X_home,
-                     X_away,
-                     home_lr_model,
-                     away_lr_model,
-                     home_rf_model,
-                     away_rf_model,
-                     n_game_avg=5):
-        # TODO: Figure out how to better represent the test data
-        X_home_test = X_home.tail(n_game_avg).mean(axis=0).to_frame().transpose()
-        X_away_test = X_away.tail(n_game_avg).mean(axis=0).to_frame().transpose()
+                    X_home,
+                    X_away,
+                    home_rf_model,
+                    away_rf_model):
+        # Build test point from team's prior schedule
+        X_home_test, X_away_test = self.build_test_point(X_home, X_away)
         
-        home_lr_pred = home_lr_model.predict(X_home_test)[0]
-        away_lr_pred = away_lr_model.predict(X_away_test)[0]
+        # home_lr_pred = home_lr_model.predict(X_home_test)[0]
+        # away_lr_pred = away_lr_model.predict(X_away_test)[0]
         
-        print('Linear Regression:\n',
-              'Predicted Home Points: ', home_lr_pred, '\n',
-              'Predicted Away Points: ', away_lr_pred, '\n')
+        # print('Linear Regression:\n',
+        #       'Predicted Home Points: ', home_lr_pred, '\n',
+        #       'Predicted Away Points: ', away_lr_pred, '\n')
         
         home_rf_pred = home_rf_model.predict(X_home_test)[0]
         away_rf_pred = away_rf_model.predict(X_away_test)[0]
         
-        print('Random Forest Regression:\n',
-              'Predicted Home Points: ', home_rf_pred, '\n',
-              'Predicted Away Points: ', away_rf_pred, '\n')
+        # print('Random Forest Regression:\n',
+        #       'Predicted Home Points: ', home_rf_pred, '\n',
+        #       'Predicted Away Points: ', away_rf_pred, '\n')
         
-        return home_lr_pred, away_lr_pred, home_rf_pred, away_rf_pred
+        return home_rf_pred, away_rf_pred
     
     
     def clf_predict(self,
@@ -218,58 +237,21 @@ class Predict_Outcomes:
                     X_away,
                     home_gnb_model,
                     away_gnb_model,
-                    n_game_avg=5):
-        X_home_test = X_home.tail(n_game_avg).mean(axis=0).to_frame().transpose()
-        X_away_test = X_away.tail(n_game_avg).mean(axis=0).to_frame().transpose()
+                    n_game_avg=10):
+        # Build test point from team's prior schedule
+        X_home_test, X_away_test = self.build_test_point(X_home, X_away)
         
-        home_gnb_pred = home_gnb_model.predict(X_home_test)
-        away_gnb_pred = away_gnb_model.predict(X_away_test)
+        home_gnb_pred = home_gnb_model.predict_proba(X_home_test)
+        away_gnb_pred = away_gnb_model.predict_proba(X_away_test)
         
-        print('Gaussian Naive Bayes:\n',
-              'Home Model Probabilities: ', home_gnb_pred, '\n',
-              'Away Model Probabilities: ', away_gnb_pred, '\n')
+        # print('Gaussian Naive Bayes:\n',
+        #       'Home Model Probabilities: ', home_gnb_pred, '\n',
+        #       'Away Model Probabilities: ', away_gnb_pred, '\n')
         
         return home_gnb_pred, away_gnb_pred
 
-games_df = pd.read_excel('tournament_matchups.xlsx')
-# correct_names = games_df.isin(teams)
-
-round_results = []
-
-for i in tqdm(range(len(games_df.index))):
-    home = games_df['Home'].iloc[i]
-    away = games_df['Away'].iloc[i]
-    
-    ncaab_Predictor = Predict_Outcomes(home, away)
-    
-    # Build features for game
-    X_home_full, X_away_full, X_home, X_away, y_cat_home, y_cont_home, y_cat_away, y_cont_away = ncaab_Predictor.build_features()
-    
-    # Train regressors
-    home_sel_lr_model, away_sel_lr_model, home_sel_rf_model, away_sel_rf_model = ncaab_Predictor.train_regressors(X_home, X_away, y_cont_home, y_cont_away)
-    home_full_lr_model, away_full_lr_model, home_full_rf_model, away_full_rf_model = ncaab_Predictor.train_regressors(X_home_full, X_away_full, y_cont_home, y_cont_away)
-    
-    # Make regression predictions
-    home_lr_pred1, away_lr_pred1, home_rf_pred1, away_rf_pred1 = ncaab_Predictor.reg_predict(X_home, X_away, home_sel_lr_model, away_sel_lr_model, home_sel_rf_model, away_sel_rf_model)
-    home_lr_pred2, away_lr_pred2, home_rf_pred2, away_rf_pred2 = ncaab_Predictor.reg_predict(X_home_full, X_away_full, home_full_lr_model, away_full_lr_model, home_full_rf_model, away_full_rf_model)
-
-    # Append results to round results list
-    round_results.append([home_rf_pred2, away_rf_pred2])
-    
 
 
-
-# print('Selected Features Model:\n')
-# home_sel_lr_model, away_sel_lr_model, home_sel_rf_model, away_sel_rf_model = ncaab_Predictor.train_regressors(X_home, X_away, y_cont_home, y_cont_away)
-
-# print('Full Features Model:\n')
-# home_full_lr_model, away_full_lr_model, home_full_rf_model, away_full_rf_model = ncaab_Predictor.train_regressors(X_home_full, X_away_full, y_cont_home, y_cont_away)
-
-# print('Missouri (H) vs Kentucky (A) Prediction (selected features):', '\n')
-# missouri_lr_pred1, kentucky_lr_pred1, missouri_rf_pred1, kentucky_rf_pred1 = ncaab_Predictor.reg_predict(X_home, X_away, home_sel_lr_model, away_sel_lr_model, home_sel_rf_model, away_sel_rf_model)
-
-# print('Missouri (H) vs Kentucky (A) Prediction (full features):', '\n')
-# missouri_lr_pred2, kentucky_lr_pred2, missouri_rf_pred2, kentucky_rf_pred2 = ncaab_Predictor.reg_predict(X_home_full, X_away_full, home_full_lr_model, away_full_lr_model, home_full_rf_model, away_full_rf_model)
         
         
         
