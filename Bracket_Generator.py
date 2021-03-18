@@ -80,24 +80,22 @@ class Bracket_Generator:
             self.predictor.prep_schedule_data(home, away)
             
             # Build features for game
-            X_train, y_train_cont_home, y_train_cont_away, y_train_cat, X_home_full, X_away_full, X_home, X_away, y_cat_home, y_cont_home, y_cat_away, y_cont_away = self.predictor.build_features()
+            X_train, y_train_cont_home, y_train_cont_away, y_train_cat, X_full_test, X_select_home, X_select_away = self.predictor.build_features()
             
             # Train regressors
-            # home_sel_rf_model, away_sel_rf_model, home_sel_r2, away_sel_r2 = self.predictor.train_regressors(X_home, X_away, y_cont_home, y_cont_away)
             home_full_rf_model, away_full_rf_model, home_full_r2, away_full_r2 = self.predictor.train_regressors(X_train, y_train_cont_home, y_train_cont_away)
             
             # Train classifiers
             full_gnb_model, full_gnb_acc = self.predictor.train_classifiers(X_train, y_train_cat)
             
             # Make regression predictions
-            # home_rf_pred1, away_rf_pred1 = self.predictor.reg_predict(X_home, X_away, home_sel_rf_model, away_sel_rf_model)
-            home_rf_pred_full, away_rf_pred_full = self.predictor.reg_predict(X_home_full, X_away_full, home_full_rf_model, away_full_rf_model)
+            home_rf_pred_full, away_rf_pred_full = self.predictor.reg_predict(X_full_test, home_full_rf_model, away_full_rf_model)
             
             # Make classification predictions
-            home_gnb_pred_full, away_gnb_pred_full = self.predictor.clf_predict(X_home_full, X_away_full, full_gnb_model)
+            home_gnb_prob_full, away_gnb_prob_full = self.predictor.clf_predict(X_full_test, full_gnb_model)
         
             # Append results to round results list
-            round_results.append([home_rf_pred_full, away_rf_pred_full, home_gnb_pred_full, away_gnb_pred_full])
+            round_results.append([home_rf_pred_full, away_rf_pred_full, home_gnb_prob_full, away_gnb_prob_full])
             
         round_df = pd.concat([round_matchups, pd.DataFrame(data=round_results, columns=['home_points','away_points', 'home_clf_pred', 'away_clf_pred'])], axis=1)
         round_df['winner'] = np.where(round_df['home_points'] > round_df['away_points'], round_df['Home'], round_df['Away'])
