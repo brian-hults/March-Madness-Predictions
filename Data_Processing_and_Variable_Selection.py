@@ -129,7 +129,10 @@ class EDA:
         # NOTE: LassoCV by default normalizes X features before fitting regression
         
         # Drop response and descriptive columns
-        FIELDS_TO_DROP = ['home_team','away_points','home_points','losing_abbr',
+        FIELDS_TO_DROP = ['away_points','home_points','losing_abbr',
+                          'home_wins','away_wins','home_losses','away_losses',
+                          'home_minutes_played', 'away_minutes_played',
+                          'home_win_percentage','away_win_percentage',
                           'date','location','losing_name','winner','winning_abbr',
                           'winning_name','home_ranking','away_ranking']
         
@@ -147,10 +150,6 @@ class EDA:
                                                                                                  y_away,
                                                                                                  test_size=0.2,
                                                                                                  random_state=self.seed)
-        
-        # Set NaN values to zero
-        # X_train.fillna(0, inplace=True)
-        # X_test.fillna(0, inplace=True)
         
         # Fit Lasso Models
         lasso_home_model = LassoCV(cv=10, random_state=self.seed).fit(X_train, y_home_train)

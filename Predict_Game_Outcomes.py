@@ -11,10 +11,9 @@ NCAA Mens Basketball - Predict Game Outcomes
 import pandas as pd
 from SQL_Utils import SQL_Utils
 from sportsipy.ncaab.teams import Teams
-# from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.naive_bayes import GaussianNB
-from sklearn.preprocessing import LabelEncoder
+from sklearn.model_selection import GridSearchCV
 
 class Predict_Outcomes:
     def __init__(self):
@@ -22,9 +21,14 @@ class Predict_Outcomes:
         self.unavailable = ['brown','columbia','cornell','dartmouth','harvard',
                             'maryland-eastern-shore','pennsylvania','princeton',
                             'yale', 'cal-poly']
+        self.FIELDS_TO_DROP = ['home_team','away_points','home_points','losing_abbr',
+                          'home_minutes_played', 'away_minutes_played',
+                          'home_wins','away_wins','home_losses','away_losses',
+                          'home_win_percentage','away_win_percentage',
+                          'date','location','losing_name','winner','winning_abbr',
+                          'winning_name','home_ranking','away_ranking']
         self.teams = [team.abbreviation.lower() for team in Teams()]
         self.sql = SQL_Utils()
-        # self.prep_schedule_data(home_team, away_team, n_games)
     
     
     def prep_schedule_data(self, home_team, away_team, n_games=10):
@@ -58,160 +62,120 @@ class Predict_Outcomes:
             return home_team_df, away_team_df
         
         
-    def build_features(self):
-        FIELDS_TO_DROP = ['away_points','home_points','losing_abbr',
-                          'date','location','losing_name','winner','winning_abbr',
-                          'winning_name','home_ranking','away_ranking']
-        
+    def build_train_features(self):
         # Get the combined df from the database
         combined_df = pd.read_sql_table('cleaned_combined_schedule', con=self.sql.engine, index_col='Date_Home_Team_Index')
         
         # Split data into features and response values
-        X_combined = combined_df.drop(FIELDS_TO_DROP,1)
-        y_combined_cat = combined_df['winner']
-        y_combined_cont_home = combined_df['home_points']
-        y_combined_cont_away = combined_df['away_points']
-        
-        # Query the variable selection results for most important features
-        sorted_home_features = pd.read_sql_table('lasso_home_sorted_features', con=self.sql.engine).drop('index',1)
-        sorted_away_features = pd.read_sql_table('lasso_away_sorted_features', con=self.sql.engine).drop('index',1)
-        
-        # Get the subsets of most important features
-        top_home_features = sorted_home_features[abs(sorted_home_features['Home_Coefs']) > 0.1]['Features']
-        top_away_features = sorted_away_features[abs(sorted_away_features['Away_Coefs']) > 0.1]['Features']
-        
-        # Determine teams home/away status in their schedule [NOTE: 'winner' column label is only used for logical comparison in following steps]
-        # home_idx = pd.Series(self.home_schedule.index.str.contains(self.home_abbreviation, regex=False),
-        #                      index=self.home_schedule.index,
-        #                      name='winner').replace({True:'Home', False:'Away'})
-        # away_idx = pd.Series(self.away_schedule.index.str.contains(self.away_abbreviation, regex=False),
-        #                      index=self.away_schedule.index,
-        #                      name='winner').replace({True:'Home', False:'Away'})
-        
+        self.X_train = combined_df.drop(self.FIELDS_TO_DROP,1)
+        self.y_train_cat = combined_df['winner']
+        self.y_train_cont_home = combined_df['home_points']
+        self.y_train_cont_away = combined_df['away_points']
+    
+    
+    def build_test_features(self):
         # Separate the home and away features for each team's schedule
         # Source to merge column headers: https://stackoverflow.com/questions/39741429/pandas-replace-a-character-in-all-column-names
-        home_features = pd.concat([self.home_schedule[self.home_schedule['home_team']==True].drop(FIELDS_TO_DROP,1).filter(regex='home', axis=1),
-                                   self.home_schedule[self.home_schedule['home_team']==False].drop(FIELDS_TO_DROP,1).filter(regex='away', axis=1).columns.str.replace('away','home')], axis=0)
-        away_features = pd.concat([self.away_schedule[self.away_schedule['home_team']==True].drop(FIELDS_TO_DROP,1).filter(regex='home', axis=1),
-                                   self.away_schedule[self.away_schedule['home_team']==False].drop(FIELDS_TO_DROP,1).filter(regex='away', axis=1).columns.str.replace('home','away')], axis=0)
-        home_pace = self.home_schedule['pace']
-        away_pace = self.away_schedule['pace']
+        home1_features = self.home_schedule[self.home_schedule['home_team']==True].drop(self.FIELDS_TO_DROP,1).filter(regex='home', axis=1)
+        # Get the features when the home team was away in their schedule and merge them with the home features in this df
+        home2_features = self.home_schedule[self.home_schedule['home_team']==False].drop(self.FIELDS_TO_DROP,1).filter(regex='away', axis=1)
+        home2_features.columns = home2_features.columns.str.replace('away','home')
+        home_features = pd.concat([home1_features, home2_features], axis=0).tail(self.n_games).reset_index(drop=True)
+        
+        # Get the features when the away team was home in their schedule and merge them with the away features in this df
+        away1_features = self.away_schedule[self.away_schedule['home_team']==True].drop(self.FIELDS_TO_DROP,1).filter(regex='home', axis=1)
+        away1_features.columns = away1_features.columns.str.replace('home','away')
+        away2_features = self.away_schedule[self.away_schedule['home_team']==False].drop(self.FIELDS_TO_DROP,1).filter(regex='away', axis=1)
+        away_features = pd.concat([away1_features, away2_features], axis=0).tail(self.n_games).reset_index(drop=True)
+        
+        # Get the pace from both schedules and average them between the teams to balance the feature.
+        home_pace = self.home_schedule['pace'].tail(self.n_games).reset_index(drop=True)
+        away_pace = self.away_schedule['pace'].tail(self.n_games).reset_index(drop=True)
         avg_pace = pd.concat([home_pace, away_pace], axis=1).mean(axis=1)
         
         # Compile the team full feature dataframes
-        full_test_df = pd.concat([away_features, home_features, avg_pace], axis=1).tail(self.n_games)
+        full_test_df = pd.concat([away_features, home_features, avg_pace], axis=1)
+        self.full_test_df = full_test_df.rename(columns={0:'pace'})
         
-        # Compile the selected feature dataframes
-        select_home_df = full_test_df.filter(top_home_features, axis=1)
-        select_away_df = full_test_df.filter(top_away_features, axis=1)
-        
-        # Build the corresponding responses (Loss=0, Win=1)
-        # home_cat_response = pd.Series(self.home_schedule['winner']==self.home_schedule['home_team'],
-        #                               index=self.home_schedule.index,
-        #                               name='Outcome').replace({True:'Win',False:'Loss'})
-        # away_cat_response = pd.Series(self.away_schedule['winner']==self.away_schedule['home_team'],
-        #                               index=self.away_schedule.index,
-        #                               name='Outcome').replace({True:'Win',False:'Loss'})
-        
-        # Rename the index columns to avoid confusion now that we are done matching, and take the tail
-        # self.home_idx = pd.Series(data=home_idx.values, index=home_idx.index, name='team_status')
-        # self.away_idx = pd.Series(data=away_idx.values, index=away_idx.index, name='team_status')
-        
-        # Get the points per game for home and away
-        # home_sch_points = pd.concat([self.home_idx, self.home_schedule['home_points'], self.home_schedule['away_points'], home_cat_response], axis=1)
-        # away_sch_points = pd.concat([self.away_idx, self.away_schedule['home_points'], self.away_schedule['away_points'], away_cat_response], axis=1)
-        
-        # Build the corresponding continuous responses
-        # home_resp_list = []
-        # away_resp_list = []
-        
-        # for i, j in zip(range(len(home_sch_points.index)), range(len(away_sch_points.index))):
-        #     if home_sch_points['team_status'].iloc[i]=='Home':
-        #         home_resp_list.append(home_sch_points['home_points'].iloc[i])
-        #     else:
-        #         home_resp_list.append(home_sch_points['away_points'].iloc[i])
-                
-        #     if away_sch_points['team_status'].iloc[j]=='Home':
-        #         away_resp_list.append(away_sch_points['home_points'].iloc[j])
-        #     else:
-        #         away_resp_list.append(away_sch_points['away_points'].iloc[j])
-            
-        # home_cont_response = pd.Series(home_resp_list).tail(self.n_games)
-        # away_cont_response = pd.Series(away_resp_list).tail(self.n_games)
-        
-        # home_cat_response = home_cat_response.tail(self.n_games)
-        # away_cat_response = away_cat_response.tail(self.n_games)
-        
-        output = [X_combined,
-                  y_combined_cont_home,
-                  y_combined_cont_away,
-                  y_combined_cat,
-                  full_test_df,
-                  select_home_df,
-                  select_away_df]
-        
-        return output
+        # Take averages to build the test point for this game
+        self.build_test_point()
     
-    def build_test_point(self, X_test, n_game_avg=5):
+    
+    def build_test_point(self, n_game_avg=5):
         # TODO: Figure out how to better represent the test data
-        X_test_avg = X_test.tail(n_game_avg).mean(axis=0).to_frame().transpose()
-        return X_test_avg
+        self.X_test_avg = self.full_test_df.tail(n_game_avg).mean(axis=0).to_frame().transpose()
     
-    def train_regressors(self, X_train, y_train_home, y_train_away):
+    
+    def train_regressors(self):
+        # Query best parameters from grid search results in database
+        best_params_df = pd.read_sql_table('grid_search_best_params', con=self.sql.engine, index_col='index')
+        
         # Fit Random Forest Regression models
-        home_rf_model = RandomForestRegressor(n_estimators=200, random_state=self.seed).fit(X_train, y_train_home)
-        away_rf_model = RandomForestRegressor(n_estimators=200, random_state=self.seed).fit(X_train, y_train_away)
+        home_rf_model = RandomForestRegressor(n_estimators=best_params_df.loc['n_estimators','home_params'],
+                                              max_depth=best_params_df.loc['max_depth','home_params'],
+                                              random_state=self.seed).fit(self.X_train, self.y_train_cont_home)
+        away_rf_model = RandomForestRegressor(n_estimators=best_params_df.loc['n_estimators','away_params'],
+                                              max_depth=best_params_df.loc['max_depth','away_params'],
+                                              random_state=self.seed).fit(self.X_train, self.y_train_cont_away)
         
         # Score trained models
-        home_rf_r2 = home_rf_model.score(X_train, y_train_home)
-        away_rf_r2 = away_rf_model.score(X_train, y_train_away)
-        
-        # print('Random Forest Regression:\n',
-        #       'Home R2: ', home_rf_r2, '\n',
-        #       'Away R2: ', away_rf_r2, '\n')
+        home_rf_r2 = home_rf_model.score(self.X_train, self.y_train_cont_home)
+        away_rf_r2 = away_rf_model.score(self.X_train, self.y_train_cont_away)
         
         return home_rf_model, away_rf_model, home_rf_r2, away_rf_r2 
     
     
-    def train_classifiers(self, X_train, y_train):
+    def train_classifiers(self):
         # Fit Gaussian Naive Bayes model
-        gnb_model = GaussianNB().fit(X_train, y_train)
+        gnb_model = GaussianNB().fit(self.X_train, self.y_train_cat)
         
         # Score trained model
-        gnb_acc = gnb_model.score(X_train, y_train)
-        
-        # print('Gaussian Naive Bayes:\n',
-        #       'Home Accuracy: ', home_acc, '\n',
-        #       'Away Accuracy: ', away_acc, '\n')
+        gnb_acc = gnb_model.score(self.X_train, self.y_train_cat)
         
         return gnb_model, gnb_acc
         
     
-    def reg_predict(self, X_test, home_rf_model, away_rf_model):
-        # Build test point from team's prior schedule
-        X_test_avg = self.build_test_point(X_test)
-        
-        home_rf_pred = home_rf_model.predict(X_test_avg)[0]
-        away_rf_pred = away_rf_model.predict(X_test_avg)[0]
-        
-        # print('Random Forest Regression:\n',
-        #       'Predicted Home Points: ', home_rf_pred, '\n',
-        #       'Predicted Away Points: ', away_rf_pred, '\n')
-        
+    def reg_predict(self, home_rf_model, away_rf_model):
+        home_rf_pred = home_rf_model.predict(self.X_test_avg)[0]
+        away_rf_pred = away_rf_model.predict(self.X_test_avg)[0]
         return home_rf_pred, away_rf_pred
     
     
-    def clf_predict(self, X_test, gnb_model):
-        # Build test point from team's prior schedule
-        X_test_avg = self.build_test_point(X_test)
-        
-        gnb_probs = gnb_model.predict_proba(X_test_avg)
-        
-        # print('Gaussian Naive Bayes:\n',
-        #       'Home Model Probabilities: ', home_gnb_pred, '\n',
-        #       'Away Model Probabilities: ', away_gnb_pred, '\n')
-        
+    def clf_predict(self, gnb_model):
+        gnb_probs = gnb_model.predict_proba(self.X_test_avg)[0]
         return gnb_probs
+    
+    
+    def rf_grid_search(self, param_grid=None):
+        if not param_grid:
+            param_grid = {'n_estimators': list(range(100,550,50)), 'max_depth': list(range(5,25,5))}
+            
+        # Build training features
+        self.build_train_features()
+            
+        rf_model1 = RandomForestRegressor()
+        rf_model2 = RandomForestRegressor()
+        
+        home_grid_search_results = GridSearchCV(rf_model1,
+                                                param_grid,
+                                                cv=10,
+                                                n_jobs=-1,
+                                                verbose=1).fit(self.X_train, self.y_train_cont_home)
+
+        away_grid_search_results = GridSearchCV(rf_model2,
+                                                param_grid,
+                                                cv=10,
+                                                n_jobs=-1,
+                                                verbose=1).fit(self.X_train, self.y_train_cont_away)
+        
+        # Save grid search best parameters to the database
+        home_params_df = pd.DataFrame.from_dict(data=home_grid_search_results.best_params_, orient='index')
+        away_params_df = pd.DataFrame.from_dict(data=away_grid_search_results.best_params_, orient='index')
+        grid_search_best_params = pd.concat([home_params_df, away_params_df], axis=1)
+        grid_search_best_params.columns = ['home_params', 'away_params']
+        grid_search_best_params.to_sql('grid_search_best_params', con=self.sql.engine, if_exists='replace')
+        
+        return home_grid_search_results, away_grid_search_results
 
 
 
