@@ -148,4 +148,4 @@ bracket_generator = Bracket_Generator()
 home_rf_model, away_rf_model, gnb_model = bracket_generator.train_models()
 
 # Make predictions and build the bracket
-bracket_generator.build_bracket(manual_picks=True)
+bracket_generator.build_bracket(manual_picks=False)
