@@ -1,3 +1,5 @@
 sqlite/
 scrap-code.py
 *.xlsx
+*.csv
+*.db
