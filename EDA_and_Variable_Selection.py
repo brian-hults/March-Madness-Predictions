@@ -22,9 +22,11 @@ class EDA:
     def __init__(self):
         self.seed = 37
         self.today = datetime.date.today()
-        self.unavailable = ['brown','columbia','cornell','dartmouth','harvard',
-                            'maryland-eastern-shore','pennsylvania','princeton',
-                            'yale','cal-poly']
+# =============================================================================
+#         self.unavailable = ['brown','columbia','cornell','dartmouth','harvard',
+#                             'maryland-eastern-shore','pennsylvania','princeton',
+#                             'yale','cal-poly']
+# =============================================================================
         self.sql = SQL_Utils()
         self.teams = Teams()
         
