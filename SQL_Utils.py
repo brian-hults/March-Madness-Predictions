@@ -13,7 +13,7 @@ import sqlalchemy_utils.functions as sql_utils
 
 class SQL_Utils:
     def __init__(self):
-        self.db_address = 'sqlite:///sqlite/db/2020-2021_team_schedule_data.db'
+        self.db_address = 'sqlite:///db/NCAA_Basketball.db'
         if not sql_utils.database_exists(self.db_address):
             sql_utils.create_database(self.db_address)
         self.engine = self.create_engine()
@@ -21,3 +21,4 @@ class SQL_Utils:
     def create_engine(self):
         engine = sql.create_engine(self.db_address, echo=False, pool_recycle=1800)
         return engine
+    
