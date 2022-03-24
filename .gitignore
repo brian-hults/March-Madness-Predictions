@@ -7,3 +7,4 @@ scrap-code.py
 *.pyc
 *.pyc
 __pycache__/SQL_Utils.cpython-38.pyc
+*.pkl
