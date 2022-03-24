@@ -5,3 +5,5 @@ scrap-code.py
 *.csv
 *.db
 *.pyc
+*.pyc
+__pycache__/SQL_Utils.cpython-38.pyc
