@@ -18,9 +18,7 @@ from sklearn.model_selection import GridSearchCV
 class Predict_Outcomes:
     def __init__(self):
         self.seed = 37
-        self.unavailable = ['brown','columbia','cornell','dartmouth','harvard',
-                            'maryland-eastern-shore','pennsylvania','princeton',
-                            'yale', 'cal-poly']
+        self.unavailable = [] #['brown','columbia','cornell','dartmouth','harvard','maryland-eastern-shore','pennsylvania','princeton','yale', 'cal-poly']
         self.FIELDS_TO_DROP = ['home_team','away_points','home_points','losing_abbr',
                           'home_minutes_played', 'away_minutes_played',
                           'home_wins','away_wins','home_losses','away_losses',
@@ -32,9 +30,9 @@ class Predict_Outcomes:
     
     
     def prep_schedule_data(self, home_team, away_team, n_games=10):
-        if (home_team in self.teams) and (away_team in self.teams):
-            self.home_abbreviation = home_team
-            self.away_abbreviation = away_team
+        if (home_team.lower() in self.teams) and (away_team.lower() in self.teams):
+            self.home_abbreviation = home_team.lower()
+            self.away_abbreviation = away_team.lower()
             self.home_schedule, self.away_schedule = self.query_schedules()
         
             # Compare the length of the schedule history for each team
@@ -48,6 +46,9 @@ class Predict_Outcomes:
                 self.n_games = away_sch_len
             else:
                 self.n_games = n_games
+                
+            return self.home_schedule, self.away_schedule
+                
         else:
             print('ERROR! - Invalid team name(s) not found in season schedule!')
         
@@ -73,7 +74,10 @@ class Predict_Outcomes:
         self.y_train_cont_away = combined_df['away_points']
     
     
-    def build_test_features(self):
+    def build_test_features(self, home_schedule, away_schedule):
+        self.home_schedule = home_schedule
+        self.away_schedule = away_schedule
+        
         # Separate the home and away features for each team's schedule
         # Source to merge column headers: https://stackoverflow.com/questions/39741429/pandas-replace-a-character-in-all-column-names
         home1_features = self.home_schedule[self.home_schedule['home_team']==True].drop(self.FIELDS_TO_DROP,1).filter(regex='home', axis=1)
